@@ -8,7 +8,6 @@ from app.api import jobs, auth, ws
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create DB tables
     create_tables()
     yield
 
@@ -22,8 +21,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],  # add prod URL here
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
