@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/coderunner
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=dev-secret-change-in-prod
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: ./backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/coderunner
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=dev-secret-change-in-prod
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # worker spawns sibling containers
+      - ./backend:/app
+    command: python -m app.workers.runner
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: coderunner
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
