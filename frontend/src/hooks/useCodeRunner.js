@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 
+const BASE = import.meta.env.VITE_API_URL || ""
+
 export function useCodeRunner() {
   const [status, setStatus] = useState(null)
   const [stdout, setStdout] = useState("")
@@ -26,7 +28,7 @@ export function useCodeRunner() {
     if (intervalRef.current) clearInterval(intervalRef.current)
 
     try {
-      const res = await fetch("/api/jobs/", {
+      const res = await fetch(`${BASE}/api/jobs/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language, source_code, stdin }),
@@ -36,7 +38,7 @@ export function useCodeRunner() {
 
       intervalRef.current = setInterval(async () => {
         try {
-          const r = await fetch(`/api/jobs/${jobId}`)
+          const r = await fetch(`${BASE}/api/jobs/${jobId}`)
           const data = await r.json()
           setStatus(data.status)
 
