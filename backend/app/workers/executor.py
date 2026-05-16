@@ -1,36 +1,15 @@
-import subprocess
-import tempfile
-import os
+import httpx
 import time
-from pathlib import Path
 from app.core.config import settings
 
+PISTON_URL = "https://emkc.org/api/v2/piston/execute"
+
 LANGUAGE_CONFIG = {
-    "python": {
-        "image": "python:3.11-slim",
-        "filename": "solution.py",
-        "run_cmd": ["python", "/tmp/solution.py"],
-    },
-    "javascript": {
-        "image": "node:20-slim",
-        "filename": "solution.js",
-        "run_cmd": ["node", "/tmp/solution.js"],
-    },
-    "go": {
-        "image": "golang:1.22-alpine",
-        "filename": "main.go",
-        "run_cmd": ["go", "run", "/tmp/main.go"],
-    },
-    "java": {
-        "image": "openjdk:21-slim",
-        "filename": "Main.java",
-        "run_cmd": ["bash", "-c", "cd /tmp && javac Main.java && java Main"],
-    },
-    "rust": {
-        "image": "rust:1.77-slim",
-        "filename": "main.rs",
-        "run_cmd": ["bash", "-c", "rustc /tmp/main.rs -o /tmp/prog && /tmp/prog"],
-    },
+    "python": {"language": "python", "version": "3.10.0"},
+    "javascript": {"language": "javascript", "version": "18.15.0"},
+    "go": {"language": "go", "version": "1.16.2"},
+    "java": {"language": "java", "version": "15.0.2"},
+    "rust": {"language": "rust", "version": "1.50.0"},
 }
 
 
@@ -48,65 +27,30 @@ def execute_code(language: str, source_code: str, stdin: str = "") -> ExecutionR
         raise ValueError(f"Unsupported language: {language}")
 
     config = LANGUAGE_CONFIG[language]
-    filename = config["filename"]
-
-    # Write code to a temp file inside the worker container
-    tmpdir = tempfile.mkdtemp(dir="/tmp")
-    code_path = os.path.join(tmpdir, filename)
-    with open(code_path, "w") as f:
-        f.write(source_code)
-
-    # Create container without starting it
-    create_result = subprocess.run(
-        [
-            "docker", "create",
-            "--network", "none",
-            "--memory", f"{settings.max_memory_mb}m",
-            "--memory-swap", f"{settings.max_memory_mb}m",
-            "--cpus", "0.5",
-            "--pids-limit", "50",
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
-            config["image"],
-            *config["run_cmd"],
-        ],
-        capture_output=True,
-    )
-    container_id = create_result.stdout.decode().strip()
-
-    if not container_id:
-        return ExecutionResult("", "Failed to create container", 1, 0)
+    start = time.monotonic()
 
     try:
-        # Copy code file into container
-        subprocess.run(
-            ["docker", "cp", code_path, f"{container_id}:/tmp/{filename}"],
-            check=True,
-        )
+        with httpx.Client(timeout=30) as client:
+            response = client.post(PISTON_URL, json={
+                "language": config["language"],
+                "version": config["version"],
+                "files": [{"content": source_code}],
+                "stdin": stdin,
+            })
+            data = response.json()
 
-        # Start and get output
-        start = time.monotonic()
-        try:
-            result = subprocess.run(
-                ["docker", "start", "-a", "-i", container_id],
-                input=stdin.encode(),
-                capture_output=True,
-                timeout=settings.max_execution_time_seconds,
-            )
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            return ExecutionResult(
-                stdout=result.stdout.decode("utf-8", errors="replace"),
-                stderr=result.stderr.decode("utf-8", errors="replace"),
-                exit_code=result.returncode,
-                execution_time_ms=elapsed_ms,
-            )
-        except subprocess.TimeoutExpired:
-            subprocess.run(["docker", "kill", container_id], capture_output=True)
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            res = ExecutionResult("", f"Timed out after {settings.max_execution_time_seconds}s", -1, elapsed_ms)
-            res.timed_out = True
-            return res
-    finally:
-        subprocess.run(["docker", "rm", "-f", container_id], capture_output=True)
-        import shutil
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        run = data.get("run", {})
+
+        stdout = run.get("stdout", "")
+        stderr = run.get("stderr", "")
+        exit_code = run.get("code", 0)
+        timed_out = run.get("signal") == "SIGKILL"
+
+        result = ExecutionResult(stdout, stderr, exit_code, elapsed_ms)
+        result.timed_out = timed_out
+        return result
+
+    except Exception as e:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        return ExecutionResult("", str(e), 1, elapsed_ms)
