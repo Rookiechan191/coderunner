@@ -34,17 +34,23 @@ def execute_code(language: str, source_code: str, stdin: str = "") -> ExecutionR
             response = client.post(PISTON_URL, json={
                 "language": config["language"],
                 "version": config["version"],
-                "files": [{"content": source_code}],
+                "files": [{"name": "main", "content": source_code}],
                 "stdin": stdin,
             })
             data = response.json()
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        run = data.get("run", {})
 
-        stdout = run.get("stdout", "")
-        stderr = run.get("stderr", "")
+        run = data.get("run", {})
+        compile_result = data.get("compile", {})
+
+        stdout = run.get("stdout", "") or compile_result.get("stdout", "")
+        stderr = run.get("stderr", "") or compile_result.get("stderr", "")
         exit_code = run.get("code", 0)
+
+        if exit_code is None:
+            exit_code = 0
+
         timed_out = run.get("signal") == "SIGKILL"
 
         result = ExecutionResult(stdout, stderr, exit_code, elapsed_ms)
