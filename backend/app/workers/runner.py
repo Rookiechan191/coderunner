@@ -1,9 +1,12 @@
 import sys
+import os
+sys.path.insert(0, '/app')
+
 from rq import Worker, Queue
-from app.core.redis_client import get_queues, redis_conn
+from app.core.redis_client import redis_conn
 
 def main():
-    queues = get_queues()
+    queues = [Queue("high", connection=redis_conn), Queue("execution", connection=redis_conn)]
     worker = Worker(queues, connection=redis_conn)
     worker.work(with_scheduler=True)
 
