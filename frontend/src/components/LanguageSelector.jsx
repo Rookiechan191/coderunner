@@ -1,9 +1,10 @@
-const LANGUAGES = ['python', 'javascript', 'go', 'java', 'rust']
+const LANGUAGES = ['python', 'javascript', 'go', 'java', 'rust', 'cpp']
 
-export default function LanguageSelector({ value, onChange }) {
+export default function LanguageSelector({ value, onChange, selected }) {
+  const current = value || selected
   return (
     <select
-      value={value}
+      value={current}
       onChange={e => onChange(e.target.value)}
       style={{
         background: '#1e1e1e',

@@ -132,11 +132,13 @@ export default function App() {
               display: "inline-block",
             }} />
             <span style={{ fontSize: 12, color: "#52525b" }}>
-              {language === "java" ? "Main.java"
-                : language === "go" ? "main.go"
-                : language === "rust" ? "main.rs"
-                : `solution.${language === "javascript" ? "js" : language === "python" ? "py" : language}`}
-            </span>
+  {language === "java" ? "Main.java"
+    : language === "go" ? "main.go"
+    : language === "rust" ? "main.rs"
+    : language === "cpp" ? "main.cpp"
+    : language === "javascript" ? "solution.js"
+    : "solution.py"}
+</span>
             <span style={{ marginLeft: "auto", fontSize: 11, color: "#3f3f46" }}>
               Ctrl+Enter to run
             </span>
