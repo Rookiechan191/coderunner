@@ -11,6 +11,7 @@ LANGUAGE_CONFIG = {
     "go": {"cmd": ["go", "run"], "filename": "main.go"},
     "java": {"cmd": None, "filename": "Main.java"},
     "rust": {"cmd": None, "filename": "main.rs"},
+    "cpp": {"cmd": None, "filename": "main.cpp"},
 }
 
 
@@ -39,6 +40,8 @@ def execute_code(language: str, source_code: str, stdin: str = "") -> ExecutionR
             cmd = ["bash", "-c", f"cd {tmpdir} && javac {filename} && java Main"]
         elif language == "rust":
             cmd = ["bash", "-c", f"rustc {code_path} -o {tmpdir}/prog && {tmpdir}/prog"]
+        elif language == "cpp":
+            cmd = ["bash", "-c", f"g++ {code_path} -o {tmpdir}/prog && {tmpdir}/prog"]
         else:
             cmd = config["cmd"] + [code_path]
 

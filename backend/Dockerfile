@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     default-jdk \
     rustc \
     cargo \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

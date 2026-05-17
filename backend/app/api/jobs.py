@@ -13,7 +13,7 @@ from app.workers.tasks import run_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-SUPPORTED_LANGUAGES = ["python", "javascript", "go", "java", "rust"]
+SUPPORTED_LANGUAGES = ["python", "javascript", "go", "java", "rust", "cpp"]
 
 
 class ExecuteRequest(BaseModel):
