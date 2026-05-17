@@ -7,10 +7,10 @@ export default function OutputPanel({ stdout, stderr, status, loading }) {
     )
   }
 
-  if (!stdout && !stderr && !status) {
+  if (!stdout && !stderr) {
     return (
       <div style={{ padding: 16, color: '#3f3f46', fontFamily: 'monospace', fontSize: 13 }}>
-        Run your code to see output here.
+        {status === 'success' ? 'No output' : 'Run your code to see output here.'}
       </div>
     )
   }
