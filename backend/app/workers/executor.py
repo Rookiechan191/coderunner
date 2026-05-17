@@ -1,15 +1,16 @@
-import httpx
+import subprocess
+import tempfile
+import os
 import time
+from pathlib import Path
 from app.core.config import settings
 
-PISTON_URL = "https://emkc.org/api/v2/piston/execute"
-
 LANGUAGE_CONFIG = {
-    "python": {"language": "python", "version": "3.10.0"},
-    "javascript": {"language": "javascript", "version": "18.15.0"},
-    "go": {"language": "go", "version": "1.16.2"},
-    "java": {"language": "java", "version": "15.0.2"},
-    "rust": {"language": "rust", "version": "1.50.0"},
+    "python": {"cmd": ["python3"], "filename": "solution.py"},
+    "javascript": {"cmd": ["node"], "filename": "solution.js"},
+    "go": {"cmd": ["go", "run"], "filename": "main.go"},
+    "java": {"cmd": None, "filename": "Main.java"},
+    "rust": {"cmd": None, "filename": "main.rs"},
 }
 
 
@@ -27,36 +28,37 @@ def execute_code(language: str, source_code: str, stdin: str = "") -> ExecutionR
         raise ValueError(f"Unsupported language: {language}")
 
     config = LANGUAGE_CONFIG[language]
-    start = time.monotonic()
+    filename = config["filename"]
 
-    try:
-        with httpx.Client(timeout=30) as client:
-            response = client.post(PISTON_URL, json={
-                "language": config["language"],
-                "version": config["version"],
-                "files": [{"name": "main", "content": source_code}],
-                "stdin": stdin,
-            })
-            data = response.json()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        code_path = os.path.join(tmpdir, filename)
+        with open(code_path, "w") as f:
+            f.write(source_code)
 
-        elapsed_ms = int((time.monotonic() - start) * 1000)
+        if language == "java":
+            cmd = ["bash", "-c", f"cd {tmpdir} && javac {filename} && java Main"]
+        elif language == "rust":
+            cmd = ["bash", "-c", f"rustc {code_path} -o {tmpdir}/prog && {tmpdir}/prog"]
+        else:
+            cmd = config["cmd"] + [code_path]
 
-        run = data.get("run", {})
-        compile_result = data.get("compile", {})
-
-        stdout = run.get("stdout", "") or compile_result.get("stdout", "")
-        stderr = run.get("stderr", "") or compile_result.get("stderr", "")
-        exit_code = run.get("code", 0)
-
-        if exit_code is None:
-            exit_code = 0
-
-        timed_out = run.get("signal") == "SIGKILL"
-
-        result = ExecutionResult(stdout, stderr, exit_code, elapsed_ms)
-        result.timed_out = timed_out
-        return result
-
-    except Exception as e:
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        return ExecutionResult("", str(e), 1, elapsed_ms)
+        start = time.monotonic()
+        try:
+            result = subprocess.run(
+                cmd,
+                input=stdin.encode(),
+                capture_output=True,
+                timeout=settings.max_execution_time_seconds,
+            )
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            return ExecutionResult(
+                stdout=result.stdout.decode("utf-8", errors="replace"),
+                stderr=result.stderr.decode("utf-8", errors="replace"),
+                exit_code=result.returncode,
+                execution_time_ms=elapsed_ms,
+            )
+        except subprocess.TimeoutExpired:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            res = ExecutionResult("", f"Timed out after {settings.max_execution_time_seconds}s", -1, elapsed_ms)
+            res.timed_out = True
+            return res
